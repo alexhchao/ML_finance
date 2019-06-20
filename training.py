@@ -43,6 +43,62 @@ print(sig.stats)
 pd.DataFrame(sig.stats)
 
 ############################
+# run backtests on all factors
+
+all_bts = {f:SignalUnivariateStudy(data_df = df,
+                            factor_name = f,
+                            neutralizer_column = 'sector',
+                            order = 'asc',
+                            n = 5) for f in list_factors[1:]}
+
+#all_bts['vol'].stats.iloc[:,-1]
+
+pd.concat({f:all_bts[f].stats.iloc[:,-1] for f in list_factors[1:]},axis=1)
+
+df
+
+all_bts['size'].wealth.plot()
+
+
+############################
+# lets start building ML framework
+
+import statsmodels.api as sm
+
+y_var = 'fwd_returns'
+
+# Generate artificial data (2 regressors + constant)
+# exclude where y is null
+
+
+_df = _df.query("date <= '2006-12-31'")
+
+_df = df.copy()
+
+
+_df = df[df[y_var].notnull()]
+
+y = _df['fwd_returns']
+X = _df.loc[:,list_factors[1:]]
+
+X_z = X.apply(zscore, axis=0)
+
+X_z.fillna(0)
+
+
+X_z = sm.add_constant(X_z)
+
+# Fit regression model
+results = sm.OLS(y, X_z.fillna(0)).fit()
+
+# Inspect the results
+print(results.summary())
+
+
+
+
+def zscore(x):
+    return (x-x.mean() )/ x.std()
 
 
 
