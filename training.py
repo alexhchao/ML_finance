@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import seaborn as sns
+sns.set()
 
 pd.options.display.max_rows = 15
 pd.options.display.max_columns = 15
@@ -95,11 +97,12 @@ _ret.index[-1]
 
 
 sig = SignalUnivariateStudy(data_df = df,
-                            factor_name = 'vol',
+                            factor_name = 'momentum',
                             neutralizer_column = 'sector',
                             order = 'asc',
-                            n = 5)
-sig
+                            n = 10)
+
+sig.data_df.groupby(['date','sector']).vol_SN.describe()
 
 sig.wealth.plot()
 
@@ -108,6 +111,10 @@ df['fwd_returns'].mean()
 print(sig.stats)
 
 pd.DataFrame(sig.stats)
+
+############################
+
+
 
 ############################
 
