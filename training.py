@@ -66,6 +66,7 @@ all_bts['size'].wealth.plot()
 import statsmodels.api as sm
 
 y_var = 'fwd_returns'
+neutralizer_col = 'sector'
 
 # Generate artificial data (2 regressors + constant)
 # exclude where y is null
@@ -79,9 +80,13 @@ _df = df.copy()
 _df = df[df[y_var].notnull()]
 
 y = _df['fwd_returns']
-X = _df.loc[:,list_factors[1:]]
 
-X_z = X.apply(zscore, axis=0)
+X = _df.loc[:,list_factors]
+
+# sector neutral zscore
+X_z = X.groupby(neutralizer_col).apply(zscore)
+
+X_z = X_z.loc[:,[x for x in list_factors if x != neutralizer_col]]
 
 X_z.fillna(0)
 
@@ -93,6 +98,124 @@ results = sm.OLS(y, X_z.fillna(0)).fit()
 
 # Inspect the results
 print(results.summary())
+
+###########################################
+
+ols_results = run_ols(df = df,
+        y_var = 'fwd_returns',
+        neutralizer_col = 'sector',
+        list_predictor_cols = ['sector', 'momentum', 'quality', 'growth', 'vol', 'value', 'size'])
+
+
+ols_results
+
+
+
+# run rolling ols
+###########################################
+
+list_dts = df.date.unique()
+
+window = 36
+
+rolling_model = {}
+for i in np.arange(window ,len(list_dts)):
+    start_dt = list_dts[i-window ]
+    end_dt = list_dts[i]
+    print('start = {}, end = {}'.format(start_dt, end_dt))
+
+    ols_results = run_ols(df=df.query("date >= @start_dt").query("date <= @end_dt"),
+                          y_var='fwd_returns',
+                          neutralizer_col='sector',
+                          list_predictor_cols=['sector', 'momentum', 'quality', 'growth', 'vol', 'value', 'size'])
+    rolling_model[end_dt] = ols_results
+
+rolling_model[end_dt].summary()
+
+rolling_model[end_dt].params
+
+rolling_model[end_dt].rsquared
+
+rolling_model[end_dt].pvalues
+
+t_stats = rolling_model[end_dt].params/rolling_model[end_dt].bse
+
+all_ts = {}
+all_rsqrs = {}
+for dt in rolling_model.keys():
+    all_ts[dt] = rolling_model[dt].params/rolling_model[dt].bse
+    all_rsqrs[dt] = rolling_model[dt].rsquared
+
+
+pd.DataFrame(all_ts).T.plot()
+
+pd.Series(all_rsqrs).plot()
+###########################################
+
+
+
+
+
+
+
+
+
+###########################################
+
+
+help(sm.RegressionResults)
+
+#help(sm.OLS)
+#help(sm.OLS.model)
+
+#####
+# params
+####
+#
+def run_ols(df,
+            y_var,
+            neutralizer_col,
+            list_predictor_cols,
+            neutralizer_func = zscore,
+            fill_na_with = 0):
+    """
+
+    Parameters
+    ----------
+    y_var
+    neutralizer_col
+    list_predictor_cols
+    neutralizer_func
+
+    Returns
+    -------
+
+    """
+    _df = df.copy()
+
+    _df = _df[_df[y_var].notnull()] # exclude where y is null
+    y = _df[y_var]
+    X = _df.loc[:, list_factors]
+
+    # sector neutral zscore
+    X_z = X.groupby(neutralizer_col).apply(zscore)
+
+    X_z = X_z.loc[:, [x for x in list_factors if x != neutralizer_col]]
+
+    X_z = sm.add_constant(X_z)
+
+    # Fit regression model
+    results = sm.OLS(y, X_z.fillna(fill_na_with)).fit()
+
+    # Inspect the results
+    print(results.summary())
+
+    return results
+
+
+
+
+
 
 
 
