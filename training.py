@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import seaborn as sns
+sns.set()
 
 pd.options.display.max_rows = 15
 pd.options.display.max_columns = 15
@@ -17,90 +19,20 @@ df = pd.read_csv('stock_data_actual_dates.csv').iloc[:,1:]
 
 df.groupby('date').count().plot()
 
-df
-
 #############################
 # first build a light weight backtester
 #############################
-order = 'ascending'
-n = 5
-
-df_2 = add_quintiles_as_new_col(df,
-                             col_name = 'momentum',
-                             new_col_name = 'mom_q',
-                             groupby_col_name = 'date',
-                                n = 5)
-
-df_2['mom_q'] = df_2.groupby('date')['momentum'].transform(lambda x: pd.qcut(
-        x, q=n, labels= [str(x).split('.')[0] for x in np.arange(1,n+1)]  )).astype(
-            str).apply(lambda x: x.split('.')[0])
-
-x = df_2.groupby(['date','sector']).momentum.percentile_rank()
-
-df = add_sector_neutral_column(df = df,
-                          col_to_neutralize = 'momentum',
-                          neutralized_col_name=None,
-                          agg_col_names = ['date','sector'])
-
-
-df.query("date == '2006-01-31'").query("momentum.notnull()", engine = 'python').query("sector==2.0")
-
-
-x = df_2.groupby(['date','sector']).momentum.rank(pct=True)
-
-x.dropna()
-
-
-df_2['mom_q'].replace('nan',np.NaN, inplace = True)
-
-#df_2['mom_q'] = df_2['mom_q'].apply(lambda x: x.split('.')[0])
-
-df_2.dtypes
-
-df_2.groupby('date').mom_q.value_counts()
-
-
-# Long minus short basket
-if order = 'ascending':
-    avg_rets['LS - {} minus {}'.format()]
-
-
-avg_rets.apply(calc_sharpe)
-
-_ret = avg_rets.iloc[:,0]
-
-calc_stats(_ret/100)
-
-
-rets = df_2.groupby(['mom_q','date'])['fwd_returns'].mean().unstack().T.shift(1) * 0.01
-#rets.loc[:,'1']
-
-# okay this gets stats for each basket
-all_stats = rets.apply(lambda x: pd.Series(calc_stats(x)))
-
-wealth = np.cumprod(1+rets)
-
-wealth.plot()
-
-
-#{calc_stats(avg_rets.loc[:,x]) for x in list(avg_rets.columns)}
-
-
-
-_ret.index[0]
-_ret.index[-1]
-
 
 ############################
-# start here - 2019-7-19
-##################################
+
 
 sig = SignalUnivariateStudy(data_df = df,
-                            factor_name = 'vol',
+                            factor_name = 'momentum',
                             neutralizer_column = 'sector',
                             order = 'asc',
                             n = 10)
-sig
+
+sig.data_df.groupby(['date','sector']).vol_SN.describe()
 
 sig.wealth.plot()
 
@@ -109,6 +41,189 @@ df['fwd_returns'].mean()
 print(sig.stats)
 
 pd.DataFrame(sig.stats)
+
+############################
+# run backtests on all factors
+
+all_bts = {f:SignalUnivariateStudy(data_df = df,
+                            factor_name = f,
+                            neutralizer_column = 'sector',
+                            order = 'asc',
+                            n = 5) for f in list_factors[1:]}
+
+#all_bts['vol'].stats.iloc[:,-1]
+
+pd.concat({f:all_bts[f].stats.iloc[:,-1] for f in list_factors[1:]},axis=1)
+
+df
+
+all_bts['size'].wealth.plot()
+
+
+############################
+# lets start building ML framework
+
+import statsmodels.api as sm
+
+y_var = 'fwd_returns'
+neutralizer_col = 'sector'
+
+# Generate artificial data (2 regressors + constant)
+# exclude where y is null
+
+
+_df = _df.query("date <= '2006-12-31'")
+
+_df = df.copy()
+
+
+_df = df[df[y_var].notnull()]
+
+y = _df['fwd_returns']
+
+X = _df.loc[:,list_factors]
+
+# sector neutral zscore
+X_z = X.groupby(neutralizer_col).apply(zscore)
+
+X_z = X_z.loc[:,[x for x in list_factors if x != neutralizer_col]]
+
+X_z.fillna(0)
+
+
+X_z = sm.add_constant(X_z)
+
+# Fit regression model
+results = sm.OLS(y, X_z.fillna(0)).fit()
+
+# Inspect the results
+print(results.summary())
+
+###########################################
+
+ols_results = run_ols(df = df,
+        y_var = 'fwd_returns',
+        neutralizer_col = 'sector',
+        list_predictor_cols = ['sector', 'momentum', 'quality', 'growth', 'vol', 'value', 'size'])
+
+
+ols_results
+
+
+
+# run rolling ols
+###########################################
+
+list_dts = df.date.unique()
+
+window = 36
+
+rolling_model = {}
+for i in np.arange(window ,len(list_dts)):
+    start_dt = list_dts[i-window ]
+    end_dt = list_dts[i]
+    print('start = {}, end = {}'.format(start_dt, end_dt))
+
+    ols_results = run_ols(df=df.query("date >= @start_dt").query("date <= @end_dt"),
+                          y_var='fwd_returns',
+                          neutralizer_col='sector',
+                          list_predictor_cols=['sector', 'momentum', 'quality', 'growth', 'vol', 'value', 'size'])
+    rolling_model[end_dt] = ols_results
+
+rolling_model[end_dt].summary()
+
+rolling_model[end_dt].params
+
+rolling_model[end_dt].rsquared
+
+rolling_model[end_dt].pvalues
+
+t_stats = rolling_model[end_dt].params/rolling_model[end_dt].bse
+
+all_ts = {}
+all_rsqrs = {}
+for dt in rolling_model.keys():
+    all_ts[dt] = rolling_model[dt].params/rolling_model[dt].bse
+    all_rsqrs[dt] = rolling_model[dt].rsquared
+
+
+pd.DataFrame(all_ts).T.plot()
+
+pd.Series(all_rsqrs).plot()
+###########################################
+
+
+
+
+
+
+
+
+
+###########################################
+
+
+help(sm.RegressionResults)
+
+#help(sm.OLS)
+#help(sm.OLS.model)
+
+#####
+# params
+####
+#
+def run_ols(df,
+            y_var,
+            neutralizer_col,
+            list_predictor_cols,
+            neutralizer_func = zscore,
+            fill_na_with = 0):
+    """
+
+    Parameters
+    ----------
+    y_var
+    neutralizer_col
+    list_predictor_cols
+    neutralizer_func
+
+    Returns
+    -------
+
+    """
+    _df = df.copy()
+
+    _df = _df[_df[y_var].notnull()] # exclude where y is null
+    y = _df[y_var]
+    X = _df.loc[:, list_factors]
+
+    # sector neutral zscore
+    X_z = X.groupby(neutralizer_col).apply(zscore)
+
+    X_z = X_z.loc[:, [x for x in list_factors if x != neutralizer_col]]
+
+    X_z = sm.add_constant(X_z)
+
+    # Fit regression model
+    results = sm.OLS(y, X_z.fillna(fill_na_with)).fit()
+
+    # Inspect the results
+    print(results.summary())
+
+    return results
+
+
+
+
+
+
+
+
+
+def zscore(x):
+    return (x-x.mean() )/ x.std()
+
+
 
 ############################
 
