@@ -92,13 +92,14 @@ _ret.index[-1]
 
 
 ############################
-
+# start here - 2019-7-19
+##################################
 
 sig = SignalUnivariateStudy(data_df = df,
                             factor_name = 'vol',
                             neutralizer_column = 'sector',
                             order = 'asc',
-                            n = 5)
+                            n = 10)
 sig
 
 sig.wealth.plot()
