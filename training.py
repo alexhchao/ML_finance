@@ -22,7 +22,7 @@ df.groupby('date').count().plot()
 #############################
 # first build a light weight backtester
 #############################
-
+# start here
 ############################
 
 
