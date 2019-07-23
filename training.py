@@ -30,7 +30,8 @@ sig = SignalUnivariateStudy(data_df = df,
                             factor_name = 'momentum',
                             neutralizer_column = 'sector',
                             order = 'asc',
-                            n = 10)
+                            n = 5)
+sig
 
 sig.data_df.groupby(['date','sector']).vol_SN.describe()
 
@@ -41,6 +42,20 @@ df['fwd_returns'].mean()
 print(sig.stats)
 
 pd.DataFrame(sig.stats)
+
+#################
+
+sig = SignalUnivariateStudy(data_df = df,
+                            factor_name = 'fwd_returns',
+                           # neutralizer_column = 'sector',
+                            order = 'asc',
+                            n = 10)
+
+sig.stats.loc['rets',].plot()
+
+sig.rets.loc[:,['LS - 5 minus 1']] .min()
+
+#sig.rets.loc[:,['1']] .max()
 
 ############################
 # run backtests on all factors

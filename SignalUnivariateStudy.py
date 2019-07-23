@@ -5,7 +5,7 @@ import numpy as np
 import os
 import sys
 
-#from functions import calc_sharpe, calc_stats, add_quintiles_as_new_col
+from functions import calc_sharpe, calc_stats, add_quintiles_as_new_col, add_sector_neutral_column
 
 class Factor(object):
     """
